@@ -7,9 +7,9 @@ import torch
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 # torch.cuda.set_device(1)
-from utills import *
-from log import logger_tb, message_logger
-from model import *
+from utills.utills import *
+from utills.log import logger_tb, message_logger
+from models import ConSTGAT,MetaERTTE,SSML,WDR,WDR-LC
 from FTML import *
 
 
@@ -326,7 +326,7 @@ def process_test(batch_size, seq_data, model, FLAGS, epoch, is_test=False):
                                                                  is_test)  # UQ
     end_time = time.time()
     print("Pre-test time: " + str(end_time - start_time))
-    test_dataset = TestDataset(data,FLAGS)
+    test_dataset = TestDataset(data)
     test_dataloder = DataLoaderX(test_dataset, batch_size=batch_size)
     start_time = time.time()
     mape, er_test_time = test(model, test_dataloder, FLAGS, epoch, er_targets_in, er_predicts_in)
@@ -460,23 +460,34 @@ parser.add_argument('--drivers_num', type=int, default=56549, help="number of dr
 parser.add_argument('--num_components', type=int, default=6779, help="number of Table components") # 6779 5282
 parser.add_argument('--segment_num', type=int, default=120, help="segment number per link") # 192
 parser.add_argument('--Lnum7', type=int, default=83, help="0.7 remain segment") #
-parser.add_argument('--Lnum52', type=int, default=59, help="0.5 remain segment") #
-parser.add_argument('--Lnum4', type=int, default=47, help="0.4 remain segment") #
-parser.add_argument('--Lnum1', type=int, default=11, help="0.1 remain segment") #
 parser.add_argument('--Lnum3', type=int, default=36, help="0.3 pre segment") # 37 36
-parser.add_argument('--Lnum51', type=int, default=60, help="0.5 pre segment") # 61 60
-parser.add_argument('--Lnum6', type=int, default=72, help="0.6 pre segment") # 73 72
-parser.add_argument('--Lnum9', type=int, default=108, help="0.9 pre segment") # 109 108
 parser.add_argument('--highway_num', type=int, default=21, help="highway categories") # XIAN 21 Porto 20
 parser.add_argument('--lane_num', type=int, default=13, help="lane categories")
 parser.add_argument('--oneway', type=int, default=2, help="oneway categories")
 parser.add_argument('--reversed', type=int, default=3, help="reversed")
 parser.add_argument('--scale', type=float, default=0.2, help="scale")
-parser.add_argument('--path', type=str, default='/data/ShenZekai/data/Xian/', help='data path')
 # backup
 parser.add_argument('--log_dir', type=str, default="logs")
 parser.add_argument('--code_backup', type=bool, default=True, help='code backup or not')
-
+# /mnt/nfsData10/ShenZekai1/data/XAData/AvgTime/Small/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/NoERLink/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/NOResLink/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/LinkTime/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/7200Link/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_7200Link/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_1500_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/Small/4_300_1500_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
+# /mnt/nfsData10/ShenZekai1/data/XAData/4_300_3000_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
+# /mnt/nfsData10/ShenZekai1/data/XAData/Small/4_300_3000_7200/
+# ../autodl-fs/XIAN/
+# /mnt/nfsData9/ShenZekai/data/PotroALL/4_300_1500_7200/
+# /mnt/nfsData9/ShenZekai/data/PotroALL/Small/4_300_1500_7200/
+# /data/ShenZekai/data/Xian/
+# /data/ShenZekai/data/Porto/
+parser.add_argument('--path', type=str, default='/data/ShenZekai/data/Xian/', help='data path')
 FLAGS = parser.parse_args()
 logger = logger_tb(FLAGS.log_dir, FLAGS.model, FLAGS.code_backup)
 sys.stdout = message_logger(logger.log_dir)
@@ -493,22 +504,11 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
     print(device)
-    # output_path = ws + f'/results/trained_model_{model_name}/'
-    # if not os.path.exists(output_path):
-    #     os.makedirs(output_path)
-    # main(ws, epochs, FLAGS, is_test)
 
+    # train three times
     for i in range(3):
         output_path = ws + f'/results/trained_model_{i}_{model_name}/'
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         print(f'current round: {i}')
-        if FLAGS.er_mode == 0:
-            print("Testing ER mode 3:7")
-        elif FLAGS.er_mode == 1:
-            print("Testing ER mode 5:5")
-        elif FLAGS.er_mode == 2:
-            print("Testing ER mode 6:4")
-        elif FLAGS.er_mode == 3:
-            print("Testing ER mode 9:1")
         main(ws, epochs, FLAGS, is_test)

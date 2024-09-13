@@ -19,8 +19,7 @@ class Meta(nn.Module):
         super(Meta, self).__init__()
 
         self.lr = FLAGS.lr
-        self.FLAGS = FLAGS
-        self.net = ConstGATModel(FLAGS)
+        self.net = TTEMLP(FLAGS)
 
     def clip_grad_by_norm_(self, grad, max_norm):
         """
@@ -54,16 +53,8 @@ class Meta(nn.Module):
         :param y_qry:   [b, querysz]
         :return:
         """
-        # all_loss, pr_loss, er_loss = model(departure, driver_id, weekday, start_id, end_id, mid_start_id, \
-        #                                    all_link_feature, all_real, all_flow, all_linkdistance, mask, \
-        #                                    all_link_feature_re, all_real_re, all_flow_re, all_linkdistance_re, er_mask, \
-        #                                    all_num, all_mid_num, all_re_num, \
-        #                                    targets, mid_targets, re_targets, loss)
-        # def forward(self, departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_, all_link_feature, mask, FLAGS, all_mid_num=None, all_re_num=None):
         origin_weight = self.net.parameters()
-        departure, driver_id, weekday, = args[0:3]
-        start_id, end_id, mid_start_id, = args[3:6]
-        all_link_feature, all_real, all_flow, all_linkdistance,mask = args[6:11]
+        all_link_feature, all_real, all_flow, all_linkdistance = args[0:4]
         all_num, all_mid_num, all_re_num = args[-7:-4]
         label_spt = args[-4:-2]
         label_qry = args[-2]
@@ -71,23 +62,24 @@ class Meta(nn.Module):
         all_loss = 0
         pr_loss = 0
         er_loss = 0
-        y, y_tr, mid_rep = self.net(departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_linkdistance, all_link_feature, mask, all_mid_num=all_mid_num)
+        # (self, all_link_feature, all_flow, all_linkdistance, all_num, all_real, mid_num=None):
+        y, y_tr = self.net(all_link_feature,  all_flow, all_linkdistance, all_real, all_num, all_mid_num)
         # 1. run the i-th task and compute loss for k=0
         if loss_func == mape:
             pr_loss = loss_func(y_tr, label_spt[1].float())
         else:
             pr_loss = loss_func(y_tr, label_spt[1].float())
             loss = loss_func(y, label_spt[0].float())
-            pr_MPIW = torch.mean(y_tr[:, 2] - y_tr[:, 0])
+            pr_MPIW = torch.mean(y_tr[:, 2]-y_tr[:, 0])
         # 训练模型后执行此代码
         all_loss += pr_loss
         all_loss += loss
-        all_loss += 0.5 * pr_MPIW
+        all_loss += 0.5*pr_MPIW
         grads = torch.autograd.grad(pr_loss, self.net.parameters(), retain_graph=True, allow_unused=True)
         fast_weights = list(map(lambda p: p[1] - self.lr * p[0] if p[0] is not None else p[1], zip(grads, self.net.parameters())))  # 更新网络参数
         self.update_params(self.net, fast_weights)
-        re_link_feature, re_real, re_flow, re_linkdistance, re_mask = args[11:16]
-        y = self.net(departure, driver_id, weekday, mid_start_id, end_id, re_real, re_flow, re_linkdistance, re_link_feature, re_mask, all_re_num=all_re_num, mid_rep=mid_rep)
+        re_link_feature, re_real, re_flow, re_linkdistance = args[4:8]
+        y = self.net(re_link_feature, re_flow, re_linkdistance, re_real, all_re_num)
         if loss_func == mape:
             er_loss = loss_func(y, label_qry.float(), all_re_num)
         else:

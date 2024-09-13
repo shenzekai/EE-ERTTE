@@ -202,7 +202,6 @@ class TestDataset(torch.utils.data.Dataset):
         self.all_flow = data['all_flow']
         self.all_linkdistance = data['all_linkdistance']
         self.all_real = data['all_real']
-        self.mid_rep = data['mid_rep']
         self.mid_target = data['mid_target']
         self.re_target = data['re_target']
         self.mask = data['mask']
@@ -219,7 +218,6 @@ class TestDataset(torch.utils.data.Dataset):
         attr["all_flow"] = self.all_flow[index]
         attr["all_linkdistance"] = self.all_linkdistance[index]
         attr["all_real"] = self.all_real[index]
-        attr["mid_rep"] = self.mid_rep[index]
         attr["mid_target"] = self.mid_target[index]
         attr["re_target"] = self.re_target[index]
         attr["mask"] = self.mask[index]
@@ -395,8 +393,7 @@ def maemis_loss(y_pred, y_true):
 def calculate_metrics(label, predicts, loss):
     metrics = {}
     if loss == 'maemis':
-        upper_bound = predicts[:, 0]
-        lower_bound = predicts[:, 1]
+        upper_bound = predicts[:, 0], lower_bound = predicts[:, 1]
         predicts = predicts[:, 2]
     elif loss == 'quantile':
         upper_bound = predicts[:, 2]
@@ -434,7 +431,7 @@ def calculate_all_metrics(loss, label, predicts, mid_label, mid_predicts, er_tar
     metrics.update(add_prefix(calculate_metrics(label, predicts, loss), 'val'))
     metrics.update(add_prefix(calculate_metrics(mid_label, mid_predicts, loss), 'mid'))
     # Calculate and add metrics for mid data and remain data
-    if loss == 'quantile' or loss == 'maemis':
+    if loss == 'quantile':
         if is_in and len(er_predicts) == 0:
             for metric in ['mape', 'mse', 'mae', 'sr', 'picp', 'mis', 'mpiw']:
                 metrics[f're_{metric}'] = 0

@@ -11,7 +11,6 @@ from sklearn.metrics import mean_absolute_percentage_error as mape
 from prefetch_generator import BackgroundGenerator
 from torch.cuda.amp import autocast as autocast, GradScaler
 
-
 # 构建Dataset
 class TTEDataset(torch.utils.data.Dataset):
     def __init__(self, seq_data, FLAGS):
@@ -19,7 +18,6 @@ class TTEDataset(torch.utils.data.Dataset):
         all_num = []
         all_mid_num = []
         all_re_num = []
-        all_mid_start = []
         all_id = []
         all_id_re = []
         all_time = []
@@ -51,7 +49,6 @@ class TTEDataset(torch.utils.data.Dataset):
             id_re = seq_data[i][4][seq_data[i][25 + mode*2]:]   # traveled link id
             all_id_re.append(id_re)  # link id
 
-            all_mid_start.append(id_re[0])  # start index of mid link
             time = seq_data[i][11]
             time_re = seq_data[i][11][seq_data[i][25 + mode*2]:]
             all_time.append(time)  # list
@@ -97,7 +94,6 @@ class TTEDataset(torch.utils.data.Dataset):
         self.all_num = all_num
         self.all_mid_num = all_mid_num
         self.all_re_num = all_re_num
-        self.all_mid_start = all_mid_start
 
         # link 平均通行时间
         self.all_real = all_time
@@ -131,28 +127,23 @@ class TTEDataset(torch.utils.data.Dataset):
         self.mid_targets = all_mid_label
         self.re_targets = all_re_label
 
-        self.departure = seq_data[:, 10]  # slice_window
-        self.driver_id = seq_data[:, 1] # driver_id
-        self.weekday = seq_data[:, 9]  # weekday
-        self.distance = seq_data[:, 3]  # distance
-        # wide_deep_raw = seq_data[:, [1, 9, 10, 3, 5, 6]] # driver_id weekday slice_window distance link_num cross_num
-        # self.deep_category = wide_deep_raw[:, :3] # driver_id slice_window
-        # self.deep_real = wide_deep_raw[:, 3:]  # distance link_num cross_num
-        # self.wide_index = wide_deep_raw.copy()  # [256, 5]
-        # self.wide_index[:, 3:] = 0
+        wide_deep_raw = seq_data[:, [1, 9, 10, 3, 5, 6]] # driver_id weekday slice_window distance link_num
+        self.deep_category = wide_deep_raw[:, :3] # driver_id slice_window
+        self.deep_real = wide_deep_raw[:, 3:]  # distance link_num
+        self.wide_index = wide_deep_raw.copy()  # [256, 5]
+        self.wide_index[:, 3:] = 0
         # self.wide_index += [0, drivers_num, drivers_num + 7, drivers_num + 7 + 288, drivers_num + 7 + 288 + 1, drivers_num + 7 + 288 + 1 + 1]  # WDR-LC 6个
-        # self.wide_index = self.wide_index
-        # self.wide_value = wide_deep_raw
-        # self.wide_value[:, :3] = 1.0  # 类别特征的wide value 为1，只要其embedding后的值，连续特征的wide_value为连续值
+        self.wide_index += [0, drivers_num, drivers_num + 7, drivers_num + 7 + 288, drivers_num + 7 + 288 + 1,  drivers_num + 7 + 288 + 1 + 1]  # WDR-LC 6个
+        self.wide_index = self.wide_index
+        self.wide_value = wide_deep_raw
+        self.wide_value[:, :3] = 1.0  # 类别特征的wide value 为1，只要其embedding后的值，连续特征的wide_value为连续值
 
     def __getitem__(self, index):
         attr = {}
-        attr["departure"] = self.departure[index]
-        attr["driver_id"] = self.driver_id[index]
-        attr["weekday"] = self.weekday[index]
-        attr['start_id'] = self.all_id[index][0]
-        attr['end_id'] = self.all_id[index][-1]
-        attr['mid_start_id'] = self.all_mid_start[index]
+        attr["wide_index"] = self.wide_index[index]
+        attr["wide_value"] = self.wide_value[index]
+        attr["deep_category"] = self.deep_category[index]
+        attr["deep_real"] = self.deep_real[index]
         attr["all_real"] = self.all_real[index]
         attr["all_real_re"] = self.all_real_re[index]
         attr["all_flow"] = self.all_flow[index]
@@ -188,41 +179,31 @@ class DataLoaderX(DataLoader):
 
 class TestDataset(torch.utils.data.Dataset):
     def __init__(self, data):
-        # self.wide_index = data['wide_index']
-        # self.wide_value = data['wide_value']
-        # self.deep_category = data['deep_category']
-        # self.deep_real = data['deep_real']
-        self.departure = data['departure']
-        self.driver_id = data['driver_id']
-        self.weekday = data['weekday']
-        self.start_id = data['start_id']
-        self.end_id = data['end_id']
+        self.wide_index = data['wide_index']
+        self.wide_value = data['wide_value']
+        self.deep_category = data['deep_category']
+        self.deep_real = data['deep_real']
         self.all_link_feature = data['all_link_feature']
         self.all_re_num = data['all_re_num']
         self.all_flow = data['all_flow']
         self.all_linkdistance = data['all_linkdistance']
         self.all_real = data['all_real']
-        self.mid_rep = data['mid_rep']
         self.mid_target = data['mid_target']
         self.re_target = data['re_target']
-        self.mask = data['mask']
 
     def __getitem__(self, index):
         attr = {}
-        attr["departure"] = self.departure[index]
-        attr["driver_id"] = self.driver_id[index]
-        attr["weekday"] = self.weekday[index]
-        attr['start_id'] = self.start_id[index]
-        attr['end_id'] = self.end_id[index]
+        attr["wide_index"] = self.wide_index[index]
+        attr["wide_value"] = self.wide_value[index]
+        attr["deep_category"] = self.deep_category[index]
+        attr["deep_real"] = self.deep_real[index]
         attr["all_link_feature"] = self.all_link_feature[index]
         attr["all_re_num"] = self.all_re_num[index]
         attr["all_flow"] = self.all_flow[index]
         attr["all_linkdistance"] = self.all_linkdistance[index]
         attr["all_real"] = self.all_real[index]
-        attr["mid_rep"] = self.mid_rep[index]
         attr["mid_target"] = self.mid_target[index]
         attr["re_target"] = self.re_target[index]
-        attr["mask"] = self.mask[index]
         return attr
 
     def __len__(self):
@@ -236,48 +217,49 @@ def process_element(seqs, FLAGS_batch_size, max_num, dtype):
         element[i, 0:len(ele)] = np.array(ele) + 1
     return element
 
-def process_and_pad_attributes(attrs, keys, data, batch_size, segment_num, float_keys, mask):
+def process_and_pad_attributes(attrs, keys, data, batch_size, segment_num, float_keys):
     for key in keys:
         element = process_element([item[key] for item in data], batch_size, segment_num,
                                   np.float32 if key in float_keys else np.int64)
         padded = torch.from_numpy(element).float() if key in float_keys else torch.from_numpy(element).long()
         attrs[key] = padded.unsqueeze(2)
-    segment_mask = element > 0
-    attrs[mask] = torch.from_numpy(segment_mask.astype(float)).float()
-    attrs[mask] = attrs[mask].unsqueeze(2)
 
 def collate_fn(data, FLAGS):
+    ext_attrs = ['wide_index', 'wide_value', 'deep_category', 'deep_real']
     nums = ['all_num', 'all_mid_num', 'all_re_num']
-    ext_attrs = ['departure', 'driver_id', 'weekday']
-    ods = ['start_id', 'end_id', 'mid_start_id']
-    link_attrs = ['all_real', 'all_flow', 'all_linkdistance', 'all_highway', 'all_lane', 'all_oneway', 'all_reversed', 'all_id']
-    er_link_attrs = ['all_real_re', 'all_flow_re', 'all_linkdistance_re',  'all_highway_re', 'all_lane_re', 'all_oneway_re', 'all_reversed_re', 'all_id_re']
+    link_attrs = ['all_id', 'all_real', 'all_flow', 'all_linkdistance', 'all_highway', 'all_lane', 'all_oneway', 'all_reversed']
+    er_link_attrs = ['all_id_re', 'all_real_re', 'all_flow_re', 'all_linkdistance_re',  'all_highway_re', 'all_lane_re', 'all_oneway_re', 'all_reversed_re']
     labels = ['targets', 'mid_targets', 're_targets']
     attrs = {}
-    for key in nums:
-        attrs[key] = torch.LongTensor([item[key] for item in data])
     for key in ext_attrs:
-        attrs[key] = torch.LongTensor(np.array([item[key] for item in data]))
-    for key in ods:
+        if key in ['wide_index', 'deep_category']:
+            attrs[key] = torch.LongTensor(np.array([item[key] for item in data], dtype=np.int64))
+        else:
+            attrs[key] = torch.FloatTensor(np.array([item[key].astype(float) for item in data]))
+    for key in nums:
         attrs[key] = torch.LongTensor([item[key] for item in data])
     # 处理link_attrs中的键
     batch_size = len(data)
     # 处理link_attrs中的键
-    process_and_pad_attributes(attrs, link_attrs, data, batch_size, FLAGS.segment_num,  ['all_real', 'all_flow', 'all_linkdistance'], 'mask')
+    process_and_pad_attributes(attrs, link_attrs, data, batch_size, FLAGS.segment_num,  ['all_real', 'all_flow', 'all_linkdistance'])
     # 处理er_link_attrs中的键
-    process_and_pad_attributes(attrs, er_link_attrs, data, batch_size, FLAGS.Lnum7, ['all_real_re', 'all_flow_re', 'all_linkdistance_re'], 'er_mask')
+    process_and_pad_attributes(attrs, er_link_attrs, data, batch_size, FLAGS.Lnum7, ['all_real_re', 'all_flow_re', 'all_linkdistance_re'])
     for key in labels:
         attrs[key] = torch.tensor([item[key] for item in data], dtype=torch.int64)
     mask = attrs['mid_targets'] > 0
     for key in attrs:
         attrs[key] = attrs[key][mask]
+    # if FLAGS.er_mode == 3:
+    #     mask = attrs['all_re_num'] > 0
+    #     for key in attrs:
+    #         attrs[key] = attrs[key][mask]
     return attrs
 
 
-def picp(y_true, upper_bound, lower_bound):
+def picp(y_true, y_pred, upper_bound, lower_bound):
     """
-    y_true : B, N, T, D
-    upper_bound, lower_bound : B, N, T, D
+    y_true,y_pred : B, N, T, D
+    sigma : B, N, T, D
     """
     # 转换 torch.where 为 numpy 的 np.where
     result1 = np.where(y_true < upper_bound, np.ones_like(y_true), np.zeros_like(y_true))
@@ -392,11 +374,14 @@ def maemis_loss(y_pred, y_true):
     loss[loss != loss] = 0
     return loss.mean()
 
+# 计算吞吐率
+def calculate_throughput(total_samples, process_time):
+    return total_samples / process_time
+
 def calculate_metrics(label, predicts, loss):
     metrics = {}
     if loss == 'maemis':
-        upper_bound = predicts[:, 0]
-        lower_bound = predicts[:, 1]
+        upper_bound = predicts[:, 0], lower_bound = predicts[:, 1]
         predicts = predicts[:, 2]
     elif loss == 'quantile':
         upper_bound = predicts[:, 2]
@@ -412,19 +397,14 @@ def calculate_metrics(label, predicts, loss):
     metrics['sr'] = SR(label, predicts)
     # interval metrics
     if loss not in ["mape", "MAE"]:
-        metrics['picp'] = picp(label, upper_bound, lower_bound)
+        metrics['picp'] = picp(label, predicts, upper_bound, lower_bound)
         metrics['mis'] = mis(label, upper_bound, lower_bound)
         metrics['mpiw'] = mpiw(label, upper_bound, lower_bound)
     return metrics
 
-# 计算大小
 def calculate_gap(target, predicts):
     gap = target - predicts
     return gap
-
-# 计算吞吐率
-def calculate_throughput(total_samples, process_time):
-    return total_samples / process_time
 
 def calculate_all_metrics(loss, label, predicts, mid_label, mid_predicts, er_targets, er_predicts, is_in=False):
     metrics = {}
@@ -434,7 +414,7 @@ def calculate_all_metrics(loss, label, predicts, mid_label, mid_predicts, er_tar
     metrics.update(add_prefix(calculate_metrics(label, predicts, loss), 'val'))
     metrics.update(add_prefix(calculate_metrics(mid_label, mid_predicts, loss), 'mid'))
     # Calculate and add metrics for mid data and remain data
-    if loss == 'quantile' or loss == 'maemis':
+    if loss == 'quantile':
         if is_in and len(er_predicts) == 0:
             for metric in ['mape', 'mse', 'mae', 'sr', 'picp', 'mis', 'mpiw']:
                 metrics[f're_{metric}'] = 0
