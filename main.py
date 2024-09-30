@@ -469,24 +469,6 @@ parser.add_argument('--scale', type=float, default=0.2, help="scale")
 # backup
 parser.add_argument('--log_dir', type=str, default="logs")
 parser.add_argument('--code_backup', type=bool, default=True, help='code backup or not')
-# /mnt/nfsData10/ShenZekai1/data/XAData/AvgTime/Small/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/
-# /mnt/nfsData_10/ShenZekai1/data/PotroALL/NoERLink/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/NOResLink/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/LinkTime/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/7200Link/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_7200Link/
-# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_1500_7200/
-# /mnt/nfsData_10/ShenZekai1/data/PotroALL/Small/4_300_1500_7200/
-# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
-# /mnt/nfsData10/ShenZekai1/data/XAData/4_300_3000_7200/
-# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
-# /mnt/nfsData10/ShenZekai1/data/XAData/Small/4_300_3000_7200/
-# ../autodl-fs/XIAN/
-# /mnt/nfsData9/ShenZekai/data/PotroALL/4_300_1500_7200/
-# /mnt/nfsData9/ShenZekai/data/PotroALL/Small/4_300_1500_7200/
-# /data/ShenZekai/data/Xian/
-# /data/ShenZekai/data/Porto/
 parser.add_argument('--path', type=str, default='/data/ShenZekai/data/Xian/', help='data path')
 FLAGS = parser.parse_args()
 logger = logger_tb(FLAGS.log_dir, FLAGS.model, FLAGS.code_backup)
