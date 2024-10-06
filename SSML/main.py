@@ -67,8 +67,6 @@ def val(model, val_data_loader, FLAGS, is_test=False):
     label = []
     mid_label = []
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
         for i, data in enumerate(val_data_loader):
             all_num, all_mid_num, all_re_num, \
             departure, driver_id, weekday, start_id, end_id, mid_start_id, \
@@ -146,8 +144,7 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
     er_test_time = 0
     loss = FLAGS.loss
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
+
         for i, data in enumerate(test_data_loader):
             all_num, all_mid_num, all_re_num, \
             departure, driver_id, weekday, start_id, end_id, mid_start_id, \
@@ -277,8 +274,7 @@ def test(model, test_data_loader, FLAGS, epoch, er_targets_in, er_predicts_in):
     loss = FLAGS.loss
     er_test_time = 0
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
+
         for i, data in enumerate(test_data_loader):
             departure, driver_id, weekday, start_id, end_id, all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_rep, mid_target, re_target, mask = [
                 data[k].to(device) for k in data]

@@ -67,8 +67,6 @@ def val(model, val_data_loader, FLAGS, is_test=False):
     label = []
     mid_label = []
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
         for i, data in enumerate(val_data_loader):
             all_num, all_mid_num, all_re_num, \
             departure, driver_id, weekday, start_id, end_id, mid_start_id, \
@@ -145,8 +143,7 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
     er_test_time = 0
     loss = FLAGS.loss
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
+
         for i, data in enumerate(test_data_loader):
             all_num, all_mid_num, all_re_num, \
             departure, driver_id, weekday, start_id, end_id, mid_start_id, \
@@ -171,8 +168,9 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
             er_targets.append(re_targets)
             er_predicts.append(re_y)
             if is_test:
-                lower_bound = mid_y[:, 0]  # 上界
-                upper_bound = mid_y[:, 2]  # 下界
+                if FLAGS.loss=='quantile':
+                    lower_bound = mid_y[:, 0]  # 上界
+                    upper_bound = mid_y[:, 2]  # 下界
                 # 创建一个包含所有索引的张量
                 all_indices = torch.arange(all_num.size(0)).to(device)
                 indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
@@ -208,26 +206,6 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
     mid_predicts = torch.cat(mid_predicts)
     er_targets_in = torch.cat(er_targets_in)
     er_predicts_in = torch.cat(er_predicts_in)
-    # mask_full_label = torch.cat(mask_full_label)
-    # mask_full_predict = torch.cat(mask_full_predict)
-    # mask_mid_label = torch.cat(mask_mid_label)
-    # mask_mid_predict = torch.cat(mask_mid_predict)
-    # gap = calculate_gap(mask_full_label, mask_full_predict[:, 1])
-    # print("Full mask comparison", (gap > 0).sum().item(), (gap <= 0).sum().item())
-    # gap = calculate_gap(mask_mid_label, mask_mid_predict[:, 1])
-    # # Split errors into low and high
-    # # 均低估
-    # er_predicts_low = mask_full_predict[gap > 0] - mask_mid_predict[gap > 0]
-    # er_targets_low = er_targets_in[gap > 0]
-    # # 低估，中间高估
-    # mask_mid_predict[gap <= 0][:, 1] = mask_mid_label[gap <= 0]
-    # er_predicts_high = mask_full_predict[gap <= 0] - mask_mid_predict[gap <= 0]
-    # er_predicts_in = torch.cat((er_predicts_low, er_predicts_high), dim=0)
-    # er_targets_high = er_targets_in[gap <= 0]
-    # er_targets_in = torch.cat((er_targets_low, er_targets_high), dim=0)
-    # print("low", er_targets_low.shape, er_predicts_low.shape)
-    # print("high", er_targets_high.shape, er_predicts_high.shape)
-    # print("Mid mask comparison", (gap > 0).sum().item(), (gap <= 0).sum().item())
     metrics = calculate_all_metrics(loss, label.cpu().numpy(), predicts.cpu().numpy(), mid_label.cpu().numpy(), \
                                     mid_predicts.cpu().numpy(), er_targets_in.cpu().numpy(),
                                     er_predicts_in.cpu().numpy(), is_in=True)
@@ -272,8 +250,7 @@ def test(model, test_data_loader, FLAGS, epoch, er_targets_in, er_predicts_in):
     loss = FLAGS.loss
     er_test_time = 0
     with torch.no_grad():
-        if FLAGS.isdropout:
-            enable_dropout(model)
+
         for i, data in enumerate(test_data_loader):
             departure, driver_id, weekday, start_id, end_id, all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_target, re_target, mask = [
                 data[k].to(device) for k in data]
