@@ -1,4 +1,3 @@
-from utills import *
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,7 +5,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 from torch.nn.utils.rnn import pad_packed_sequence
 
 
-# import utills
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # layer部分
 class FeaturesLinear(nn.Module):

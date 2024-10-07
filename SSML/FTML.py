@@ -54,12 +54,6 @@ class Meta(nn.Module):
         :param y_qry:   [b, querysz]
         :return:
         """
-        # all_loss, pr_loss, er_loss = model(departure, driver_id, weekday, start_id, end_id, mid_start_id, \
-        #                                    all_link_feature, all_real, all_flow, all_linkdistance, mask, \
-        #                                    all_link_feature_re, all_real_re, all_flow_re, all_linkdistance_re, er_mask, \
-        #                                    all_num, all_mid_num, all_re_num, \
-        #                                    targets, mid_targets, re_targets, loss)
-        # def forward(self, departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_, all_link_feature, mask, FLAGS, all_mid_num=None, all_re_num=None):
         origin_weight = self.net.parameters()
         departure, driver_id, weekday, = args[0:3]
         start_id, end_id, mid_start_id, = args[3:6]

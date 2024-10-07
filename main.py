@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import time
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
+os.environ["CUDA_VISIBLE_DEVICES"] = '7'
 # torch.cuda.set_device(1)
 
 from utills.log import logger_tb, message_logger
@@ -15,14 +15,14 @@ from data_provider.Dataset import *
 from data_provider.collect import *
 # import nni
 
-def train(model, optimizer, data_loader, loss, FLAGS):
+def train(model, optimizer, data_loader, loss):
     model.train()
     train_loss = []
     pr_losses = []
     er_losses = []
     for i, data in enumerate(data_loader):
         # Attention
-        if FLAGS.model == 'ConSTGAT' or FLAGS.model == 'SSML' or FLAGS.model == 'MetaER-TTE':
+        if FLAGS.model in ['ConSTGAT', 'SSML', 'MetaER-TTE']:
             all_num, all_mid_num, all_re_num, \
             departure, driver_id, weekday, start_id, end_id, mid_start_id, \
             all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, all_id, mask, \
@@ -51,9 +51,9 @@ def train(model, optimizer, data_loader, loss, FLAGS):
                                                all_num, all_mid_num, all_re_num, \
                                                targets, mid_targets, re_targets, loss)
         # WDR,WDR-LC
-        elif FLAGS.model == 'WDR-LC' or FLAGS.model == 'WDR':
-            wide_index, wide_value, deep_category, deep_real, \
+        elif FLAGS.model in ['WDR_LC', 'WDR']:
             all_num, all_mid_num, all_re_num, \
+            wide_index, wide_value, deep_category, deep_real, \
             all_id, all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, \
             all_id_re, all_real_re, all_flow_re, all_linkdistance_re, all_highway_re, all_lane_re, all_oneway_re, all_reversed_re ,\
             targets, mid_targets, re_targets = [data[key].to(device) for key in data.keys()]
@@ -115,7 +115,7 @@ def val(model, val_data_loader, FLAGS):
                 start_time = time.time()
                 re_y = model.net(departure, driver_id, weekday, start_id, end_id, all_real_re, all_flow_re, all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num, mid_rep=mid_rep)
                 end_time = time.time()
-            elif FLAGS.model =='ConSTGAT' or FLAGS.model=='MetaER-TTE':
+            elif FLAGS.model in ['ConSTGAT', 'MetaER-TTE']:
                 all_num, all_mid_num, all_re_num, \
                 departure, driver_id, weekday, start_id, end_id, mid_start_id, \
                 all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, all_id, mask, \
@@ -130,9 +130,9 @@ def val(model, val_data_loader, FLAGS):
                 start_time = time.time()
                 re_y = model.net(departure, driver_id, weekday, start_id, end_id, all_real_re, all_flow_re, all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num)
                 end_time = time.time()
-            elif FLAGS.model == 'WDR-LC' or FLAGS.model == 'WDR':
-                wide_index, wide_value, deep_category, deep_real, \
+            elif FLAGS.model in ['WDR_LC', 'WDR']:
                 all_num, all_mid_num, all_re_num, \
+                wide_index, wide_value, deep_category, deep_real, \
                 all_id, all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, \
                 all_id_re, all_real_re, all_flow_re, all_linkdistance_re, all_highway_re, all_lane_re, all_oneway_re, all_reversed_re, \
                 targets, mid_targets, re_targets, = [data[key].to(device) for key in data.keys()]
@@ -147,9 +147,26 @@ def val(model, val_data_loader, FLAGS):
                                             all_re_num, all_flow_re, all_linkdistance_re, all_real_re,
                                             re_target=re_targets)
                 end_time = time.time()
-                er_val_time += end_time - start_time
-                er_targets += re_target.tolist()
-                er_predicts += re_y.tolist()
+            elif FLAGS.model =='MLPTTE':
+                all_num, all_mid_num, all_re_num, \
+                all_id, all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, \
+                all_id_re, all_real_re, all_flow_re, all_linkdistance_re, all_highway_re, all_lane_re, all_oneway_re, all_reversed_re, \
+                targets, mid_targets, re_targets, = [data[key].to(device) for key in data.keys()]
+                all_link_feature = torch.cat([all_id, all_highway, all_lane, all_reversed, all_oneway], dim=2).to(device)  # [B, F, 5]
+                all_link_feature_re = torch.cat([all_id_re, all_highway_re, all_lane_re, all_reversed_re, all_oneway_re], dim=2).to(device)  # [B, F, 5]
+                start_time = time.time()
+                y, mid_y = model.net(all_link_feature, all_flow, all_linkdistance, all_real, all_num, all_mid_num)
+                end_time = time.time()
+                pr_val_time += end_time - start_time
+                predicts += y.tolist()
+                label += targets.tolist()
+                mid_predicts += mid_y.tolist()
+                mid_label += mid_targets.tolist()
+                start_time = time.time()
+                re_y = model.net(all_link_feature_re, all_flow_re, all_linkdistance_re, all_real_re, all_re_num)
+                end_time = time.time()
+            er_targets += re_targets.tolist()
+            er_predicts += re_y.tolist()
             predicts += y.tolist()
             label += targets.tolist()
             mid_predicts += mid_y.tolist()
@@ -180,7 +197,7 @@ def val_process(batch_size, seq_data, model, FLAGSe):
     return {'mape': mape, 'pr_val_time': pr_val_time, 'er_val_time': er_val_time}
 
 
-def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
+def pre_test(model, test_data_loader, FLAGS, epoch):
     model.eval()
     # 过滤后的dataset收集
     # re_y = model.net(departure, driver_id, weekday, mid_start_id, end_id, all_real_re, all_flow_re, all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num)
@@ -205,7 +222,13 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
     mid_target_test, re_target_test = [], []
     predicts, label = [], []
     mid_label = []
-    mid_reps = []
+    if FLAGS.model in ['WDR_LC', 'WDR']:
+        wide_index_test = []
+        wide_value_test = []
+        deep_category_test = []
+        deep_real_test = []
+    if FLAGS.model == 'SSML':
+        mid_reps = []
     pr_test_time = 0
     er_test_time = 0
     loss = FLAGS.loss
@@ -226,36 +249,35 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
                 re_y = model.net(departure, driver_id, weekday, mid_start_id, end_id, all_real_re, all_flow_re, all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num, mid_rep=mid_rep)
                 end_time = time.time()
                 er_test_time += end_time - start_time
-                if is_test:
-                    lower_bound = mid_y[:, 0]  # upper bound
-                    upper_bound = mid_y[:, 2]  # lower bound
-                    all_indices = torch.arange(all_num.size(0)).to(device)
-                    indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # can not filter indices
-                    # 计算补集索引
-                    mask = ~torch.isin(all_indices, indice)
-                    mask_full_label.append(targets[mask])
-                    mask_mid_label.append(mid_targets[mask])
-                    mask_full_predict.append(y[mask])
-                    mask_mid_predict.append(mid_y[mask])
-                    re_predict_in = y[mask] - mid_y[mask]
-                    er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
-                    re_targets_in = re_targets[mask]
-                    er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
-                    departure_test += departure[indice]
-                    driver_id_test += driver_id[indice]
-                    weekday_test += weekday[indice]
-                    start_id_test += start_id[indice]
-                    end_id_test += end_id[indice]
-                    all_link_feature_test += all_link_feature_re[indice]
-                    all_re_num_test += all_re_num[indice]
-                    all_flow_test += all_flow_re[indice]
-                    all_linkdistance_test += all_linkdistance_re[indice]
-                    mask_test += re_mask[indice]
-                    all_real_test += all_real_re[indice]
-                    mid_reps += mid_rep[indice]
-                    mid_target_test += mid_targets[indice]
-                    re_target_test += re_targets[indice]
-            elif FLAGS.model == 'ConSTGAT' or FLAGS.model == 'MetaER-TTE':
+                lower_bound = mid_y[:, 0]  # upper bound
+                upper_bound = mid_y[:, 2]  # lower bound
+                all_indices = torch.arange(all_num.size(0)).to(device)
+                indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # can not filter indices
+                # 计算补集索引
+                mask = ~torch.isin(all_indices, indice)
+                mask_full_label.append(targets[mask])
+                mask_mid_label.append(mid_targets[mask])
+                mask_full_predict.append(y[mask])
+                mask_mid_predict.append(mid_y[mask])
+                re_predict_in = y[mask] - mid_y[mask]
+                er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
+                re_targets_in = re_targets[mask]
+                er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
+                departure_test += departure[indice]
+                driver_id_test += driver_id[indice]
+                weekday_test += weekday[indice]
+                start_id_test += start_id[indice]
+                end_id_test += end_id[indice]
+                all_link_feature_test += all_link_feature_re[indice]
+                all_re_num_test += all_re_num[indice]
+                all_flow_test += all_flow_re[indice]
+                all_linkdistance_test += all_linkdistance_re[indice]
+                mask_test += re_mask[indice]
+                all_real_test += all_real_re[indice]
+                mid_reps += mid_rep[indice]
+                mid_target_test += mid_targets[indice]
+                re_target_test += re_targets[indice]
+            elif FLAGS.model in ['ConSTGAT', 'MetaER-TTE']:
                 all_num, all_mid_num, all_re_num, \
                 departure, driver_id, weekday, start_id, end_id, mid_start_id, \
                 all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, all_id, mask, \
@@ -270,42 +292,37 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
                 re_y = model.net(departure, driver_id, weekday, mid_start_id, end_id, all_real_re, all_flow_re,all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num)
                 end_time = time.time()
                 er_test_time += end_time - start_time
-                if is_test:
-                    lower_bound = mid_y[:, 0]  # 上界
-                    upper_bound = mid_y[:, 2]  # 下界
-                    # 创建一个包含所有索引的张量
-                    all_indices = torch.arange(all_num.size(0)).to(device)
-                    indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
-                    # 计算补集索引
-                    mask = ~torch.isin(all_indices, indice)
-                    mask_full_label.append(targets[mask])
-                    mask_mid_label.append(mid_targets[mask])
-                    mask_full_predict.append(y[mask])
-                    mask_mid_predict.append(mid_y[mask])
-                    re_predict_in = y[mask] - mid_y[mask]
-                    er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
-                    re_targets_in = re_targets[mask]
-                    er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
-                    departure_test += departure[indice]
-                    driver_id_test += driver_id[indice]
-                    weekday_test += weekday[indice]
-                    start_id_test += start_id[indice]
-                    end_id_test += end_id[indice]
-                    all_link_feature_test += all_link_feature_re[indice]
-                    all_re_num_test += all_re_num[indice]
-                    all_flow_test += all_flow_re[indice]
-                    all_linkdistance_test += all_linkdistance_re[indice]
-                    mask_test += re_mask[indice]
-                    all_real_test += all_real_re[indice]
-                    mid_target_test += mid_targets[indice]
-                    re_target_test += re_targets[indice]
-            elif FLAGS.model == 'WDR' or FLAGS.model == 'WDR-LC':
-                wide_index_test = []
-                wide_value_test = []
-                deep_category_test = []
-                deep_real_test = []
-                wide_index, wide_value, deep_category, deep_real, \
+                lower_bound = mid_y[:, 0]  # 上界
+                upper_bound = mid_y[:, 2]  # 下界
+                # 创建一个包含所有索引的张量
+                all_indices = torch.arange(all_num.size(0)).to(device)
+                indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
+                # 计算补集索引
+                mask = ~torch.isin(all_indices, indice)
+                mask_full_label.append(targets[mask])
+                mask_mid_label.append(mid_targets[mask])
+                mask_full_predict.append(y[mask])
+                mask_mid_predict.append(mid_y[mask])
+                re_predict_in = y[mask] - mid_y[mask]
+                er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
+                re_targets_in = re_targets[mask]
+                er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
+                departure_test += departure[indice]
+                driver_id_test += driver_id[indice]
+                weekday_test += weekday[indice]
+                start_id_test += start_id[indice]
+                end_id_test += end_id[indice]
+                all_link_feature_test += all_link_feature_re[indice]
+                all_re_num_test += all_re_num[indice]
+                all_flow_test += all_flow_re[indice]
+                all_linkdistance_test += all_linkdistance_re[indice]
+                mask_test += re_mask[indice]
+                all_real_test += all_real_re[indice]
+                mid_target_test += mid_targets[indice]
+                re_target_test += re_targets[indice]
+            elif FLAGS.model in ['WDR_LC', 'WDR']:
                 all_num, all_mid_num, all_re_num, \
+                wide_index, wide_value, deep_category, deep_real, \
                 all_id, all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, \
                 all_id_re, all_real_re, all_flow_re, all_linkdistance_re, all_highway_re, all_lane_re, all_oneway_re, all_reversed_re, \
                 targets, mid_targets, re_targets, = [data[key].to(device) for key in data.keys()]
@@ -320,33 +337,32 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
                                             re_target=re_targets)
                 end_time = time.time()
                 er_test_time += end_time - start_time
-                if is_test:
-                    lower_bound = mid_y[:, 0]  # 上界
-                    upper_bound = mid_y[:, 2]  # 下界
-                    # 创建一个包含所有索引的张量
-                    all_indices = torch.arange(wide_index.size(0)).to(device)
-                    indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
-                    # 计算补集索引
-                    mask = ~torch.isin(all_indices, indice)
-                    mask_full_label.append(targets[mask])
-                    mask_mid_label.append(mid_targets[mask])
-                    mask_full_predict.append(y[mask])
-                    mask_mid_predict.append(mid_y[mask])
-                    re_predict_in = y[mask] - mid_y[mask]
-                    er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
-                    re_targets_in = re_targets[mask]
-                    er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
-                    wide_index_test += wide_index[indice]
-                    wide_value_test += wide_value[indice]
-                    deep_category_test += deep_category[indice]
-                    deep_real_test += deep_real[indice]
-                    all_link_feature_test += all_link_feature_re[indice]
-                    all_re_num_test += all_re_num[indice]
-                    all_flow_test += all_flow_re[indice]
-                    all_linkdistance_test += all_linkdistance_re[indice]
-                    all_real_test += all_real_re[indice]
-                    mid_target_test += mid_targets[indice]
-                    re_target_test += re_targets[indice]
+                lower_bound = mid_y[:, 0]  # 上界
+                upper_bound = mid_y[:, 2]  # 下界
+                # 创建一个包含所有索引的张量
+                all_indices = torch.arange(wide_index.size(0)).to(device)
+                indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
+                # 计算补集索引
+                mask = ~torch.isin(all_indices, indice)
+                mask_full_label.append(targets[mask])
+                mask_mid_label.append(mid_targets[mask])
+                mask_full_predict.append(y[mask])
+                mask_mid_predict.append(mid_y[mask])
+                re_predict_in = y[mask] - mid_y[mask]
+                er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
+                re_targets_in = re_targets[mask]
+                er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
+                wide_index_test += wide_index[indice]
+                wide_value_test += wide_value[indice]
+                deep_category_test += deep_category[indice]
+                deep_real_test += deep_real[indice]
+                all_link_feature_test += all_link_feature_re[indice]
+                all_re_num_test += all_re_num[indice]
+                all_flow_test += all_flow_re[indice]
+                all_linkdistance_test += all_linkdistance_re[indice]
+                all_real_test += all_real_re[indice]
+                mid_target_test += mid_targets[indice]
+                re_target_test += re_targets[indice]
             elif FLAGS.model == 'MLPTTE':
                 all_num, all_mid_num, all_re_num, \
                 all_id, all_real, all_flow, all_linkdistance, all_highway, all_lane, all_oneway, all_reversed, \
@@ -362,32 +378,30 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
                 end_time = time.time()
                 er_test_time += end_time - start_time
                 # UGD mechanism
-                if is_test:
-                    lower_bound = mid_y[:, 0]  # 上界
-                    upper_bound = mid_y[:, 2]  # 下界
-                    # 创建一个包含所有索引的张量
-                    all_indices = torch.arange(all_num.size(0)).to(device)
-                    indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
-                    # 计算补集索引
-                    mask = ~torch.isin(all_indices, indice)
-                    mask_full_label.append(targets[mask])
-                    mask_mid_label.append(mid_targets[mask])
-                    mask_full_predict.append(y[mask])
-                    mask_mid_predict.append(mid_y[mask])
-                    re_predict_in = y[mask] - mid_y[mask]
-                    er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
-                    re_targets_in = re_targets[mask]
-                    er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
-                    all_link_feature_test += all_link_feature_re[indice]
-                    all_re_num_test += all_re_num[indice]
-                    all_flow_test += all_flow_re[indice]
-                    all_linkdistance_test += all_linkdistance_re[indice]
-                    all_real_test += all_real_re[indice]
-                    mid_target_test += mid_targets[indice]
-                    re_target_test += re_targets[indice]
+                lower_bound = mid_y[:, 0]  # 上界
+                upper_bound = mid_y[:, 2]  # 下界
+                # 创建一个包含所有索引的张量
+                all_indices = torch.arange(all_num.size(0)).to(device)
+                indice = torch.where((mid_targets < lower_bound) | (mid_targets > upper_bound))[0]  # 不能过滤掉的
+                # 计算补集索引
+                mask = ~torch.isin(all_indices, indice)
+                mask_full_label.append(targets[mask])
+                mask_mid_label.append(mid_targets[mask])
+                mask_full_predict.append(y[mask])
+                mask_mid_predict.append(mid_y[mask])
+                re_predict_in = y[mask] - mid_y[mask]
+                er_predicts_in.append(re_predict_in if re_predict_in.ndim > 0 else re_predict_in.unsqueeze(0))
+                re_targets_in = re_targets[mask]
+                er_targets_in.append(re_targets_in if re_targets_in.ndim > 0 else re_targets_in.unsqueeze(0))
+                all_link_feature_test += all_link_feature_re[indice]
+                all_re_num_test += all_re_num[indice]
+                all_flow_test += all_flow_re[indice]
+                all_linkdistance_test += all_linkdistance_re[indice]
+                all_real_test += all_real_re[indice]
+                mid_target_test += mid_targets[indice]
+                re_target_test += re_targets[indice]
             else:
                 raise ValueError('model name error')
-                exit()
             predicts.append(y)
             label.append(targets)
             mid_predicts.append(mid_y)
@@ -413,20 +427,28 @@ def pre_test(model, test_data_loader, FLAGS, epoch, is_test=False):
     print('MAPE:%.3f\tMAE:%.3f\tRMSE:%.3f\tSR:%.3f' % (full_metrics['mape'] * 100, full_metrics['mae'], full_metrics['rmse'], full_metrics['sr']))
     print('PICP:%.3f\tMPIW:%.3f\tMIS:%.3f' % (full_metrics['picp'], full_metrics['mpiw'], full_metrics['mis']))
     FilterData = {}
-    FilterData['departure'] = departure_test
-    FilterData['driver_id'] = driver_id_test
-    FilterData['weekday'] = weekday_test
-    FilterData['start_id'] = start_id_test
-    FilterData['end_id'] = end_id_test
     FilterData['all_link_feature'] = torch.stack(all_link_feature_test)
     FilterData['all_re_num'] = torch.stack(all_re_num_test)
     FilterData['all_flow'] = torch.stack(all_flow_test)
     FilterData['all_linkdistance'] = torch.stack(all_linkdistance_test)
     FilterData['all_real'] = torch.stack(all_real_test)
     FilterData['mid_target'] = torch.stack(mid_target_test)
-    FilterData['mid_rep'] = torch.stack(mid_reps)
     FilterData['re_target'] = torch.stack(re_target_test)
-    FilterData['mask'] = torch.stack(mask_test)
+    if FLAGS.model in ['MetaER-TTE', 'ConSTGAT', 'SSML']:
+        FilterData['departure'] = departure_test
+        FilterData['driver_id'] = driver_id_test
+        FilterData['weekday'] = weekday_test
+        FilterData['start_id'] = start_id_test
+        FilterData['end_id'] = end_id_test
+        if FLAGS.model == 'SSML':
+            FilterData['mid_rep'] = torch.stack(mid_reps)
+        FilterData['mask'] = torch.stack(mask_test)
+    elif FLAGS.model in ['WDR_LC', 'WDR']:
+        FilterData['wide_index'] = torch.stack(wide_index_test)
+        FilterData['wide_value'] = torch.stack(wide_value_test)
+        FilterData['deep_category'] = torch.stack(deep_category_test)
+        FilterData['deep_real'] = torch.stack(deep_real_test)
+
     throughput = calculate_throughput(len(test_data_loader.dataset) + len(er_predicts_in), er_test_time)
     print(f"Test Throughput : {throughput:.2f} samples/second")
     return FilterData, pr_test_time, er_targets_in, er_predicts_in
@@ -439,12 +461,31 @@ def test(model, test_data_loader, FLAGS, epoch, er_targets_in, er_predicts_in):
     er_test_time = 0
     with torch.no_grad():
         for i, data in enumerate(test_data_loader):
-            departure, driver_id, weekday, start_id, end_id, all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_rep, mid_target, re_target, mask = [
+            if FLAGS.model == 'SSML':
+                departure, driver_id, weekday, start_id, end_id, mid_rep, all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_target, re_target, mask = [
                 data[k].to(device) for k in data]
-            start_time = time.time()
-            # model.net(departure, driver_id, weekday, mid_start_id, end_id, all_real_re, all_flow_re, all_linkdistance_re, all_link_feature_re, re_mask, all_re_num=all_re_num)
-            y = model.net(departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_linkdistance, all_link_feature, mask, all_re_num=all_re_num, mid_rep=mid_rep)
-            end_time = time.time()
+                start_time = time.time()
+                y = model.net(departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_linkdistance, all_link_feature, mask, all_re_num=all_re_num, mid_rep=mid_rep)
+                end_time = time.time()
+            elif FLAGS.model in ['MetaER-TTE', 'ConSTGAT']:
+                departure, driver_id, weekday, start_id, end_id, all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_target, re_target, mask = [
+                    data[k].to(device) for k in data]
+                start_time = time.time()
+                y = model.net(departure, driver_id, weekday, start_id, end_id, all_real, all_flow, all_linkdistance,  all_link_feature, mask, all_re_num=all_re_num)
+                end_time = time.time()
+            elif FLAGS.model in ['WDR_LC', 'WDR']:
+                wide_index, wide_value, deep_category, deep_real, all_link_feature, all_re_num, all_flow, all_linkdistance, \
+                    all_real, mid_target, re_target = [data[k].to(device) for k in data]
+                start_time = time.time()
+                y, target = model.net(wide_index, wide_value, deep_category, deep_real, all_link_feature, \
+                                      all_re_num, all_flow, all_linkdistance, all_real, mid_target, \
+                                      re_target=re_target)
+                end_time = time.time()
+            elif FLAGS.model == 'MLPTTE':
+                all_link_feature, all_re_num, all_flow, all_linkdistance, all_real, mid_target, re_target = [data[k].to(device) for k in data]
+                start_time = time.time()
+                y = model.net(all_link_feature, all_flow, all_linkdistance, all_real, all_re_num)
+                end_time = time.time()
             er_test_time += end_time - start_time
             predicts += y.tolist()
             label += re_target.tolist()
@@ -474,7 +515,7 @@ def process_test(batch_size, seq_data, model, FLAGS, epoch, is_test=False):
     data, pr_test_time, er_targets_in, er_predicts_in = pre_test(model, pre_test_dataloader, FLAGS, epoch)  # UQ
     end_time = time.time()
     print("Pre-test time: " + str(end_time - start_time))
-    test_dataset = TestDataset(data)
+    test_dataset = TestDataset(data,FLAGS)
     test_dataloder = DataLoaderX(test_dataset, batch_size=batch_size)
     start_time = time.time()
     mape, er_test_time = test(model, test_dataloder, FLAGS, epoch, er_targets_in, er_predicts_in)
@@ -596,7 +637,7 @@ parser.add_argument('--loss', type=str, default='quantile', help="loss function"
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--batch_size', type=int, default=4096, help="batch size")
 parser.add_argument('--lr', type=float, default=0.001, help="learning rate")
-parser.add_argument('--model', type=str, default='WDR-LC')
+parser.add_argument('--model', type=str, default='SSML')
 parser.add_argument('--hidden_dim', type=float, default=64, help="hidden dimension")
 parser.add_argument('--update_step', type=int, default=5, help="update step")
 parser.add_argument('--isdropout', type=bool, default=False, help="MC-dropout")
@@ -617,7 +658,21 @@ parser.add_argument('--scale', type=float, default=0.2, help="scale")
 # backup
 parser.add_argument('--log_dir', type=str, default="logs")
 parser.add_argument('--code_backup', type=bool, default=True, help='code backup or not')
-parser.add_argument('--path', type=str, default='/data/ShenZekai/data/Xian/', help='data path')
+# /mnt/nfsData10/ShenZekai1/data/XAData/AvgTime/Small/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/NoERLink/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/NOResLink/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/LinkTime/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/7200Link/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_7200Link/
+# /mnt/nfsData10/ShenZekai1/data/PotroALL/Small/4_1500_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/Small/4_300_1500_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
+# /mnt/nfsData10/ShenZekai1/data/XAData/4_300_3000_7200/
+# /mnt/nfsData_10/ShenZekai1/data/PotroALL/4_300_1500_7200/
+# /mnt/nfsData10/ShenZekai1/data/XAData/Small/4_300_3000_7200/
+# ../autodl-fs/XIAN/
+parser.add_argument('--path', type=str, default='/mnt/nfsData10/ShenZekai1/data/XAData/Small/4_300_3000_7200/', help='data path')
 FLAGS = parser.parse_args()
 logger = logger_tb(FLAGS.log_dir, FLAGS.model, FLAGS.code_backup)
 sys.stdout = message_logger(logger.log_dir)

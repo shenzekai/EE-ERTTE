@@ -8,9 +8,7 @@ from sklearn.metrics import mean_squared_error as mse
 from sklearn.metrics import mean_absolute_error as mae
 from sklearn.metrics import mean_absolute_percentage_error as mape
 
-
-
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def picp(y_true, upper_bound, lower_bound):
@@ -39,7 +37,7 @@ def mpiw(y_true, upper_bound, lower_bound):
     return MPIW
 
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 
 def mape_(y_hat, y, length):
